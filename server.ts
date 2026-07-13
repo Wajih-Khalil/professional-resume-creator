@@ -7,7 +7,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 // Body parsing middleware
 app.use(express.json({ limit: "5mb" }));
@@ -72,7 +72,7 @@ app.post("/api/ai/theme", async (req, res) => {
     `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: `Generate a theme for this wishful description: "${prompt}"`,
       config: {
         systemInstruction,
@@ -153,7 +153,7 @@ app.post("/api/ai/optimize-bullet", async (req, res) => {
     const contextStr = jobTitle ? `For a ${jobTitle} role at ${company || 'the company'}: ` : "";
     
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: `Rewrite this raw work history draft into 3 powerful, result-oriented bullet points: "${contextStr}${text}"`,
       config: {
         systemInstruction,
@@ -197,7 +197,7 @@ app.post("/api/ai/suggest-skills", async (req, res) => {
     `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: `Provide 3 standard, high-impact skill groups for the job title: "${jobTitle}"`,
       config: {
         systemInstruction,
@@ -256,7 +256,7 @@ app.post("/api/ai/polish-bullet", async (req, res) => {
     const contextStr = jobTitle ? `For a ${jobTitle} role: ` : "";
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: `Polish this resume accomplishment: "${contextStr}${text}"`,
       config: { systemInstruction }
     });
