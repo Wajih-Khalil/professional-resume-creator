@@ -9,8 +9,21 @@ dotenv.config();
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
+console.log("==================================");
+console.log("Server starting...");
+console.log("NODE_ENV:", process.env.NODE_ENV);
+console.log("PORT:", PORT);
+console.log("GEMINI_API_KEY exists:", !!process.env.GEMINI_API_KEY);
+console.log("==================================");
+
 // Body parsing middleware
 app.use(express.json({ limit: "5mb" }));
+
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
 
 // Initialize Gemini SDK lazily to avoid crashing on start if API key is not yet set
 let aiClient: GoogleGenAI | null = null;
@@ -18,18 +31,17 @@ let aiClient: GoogleGenAI | null = null;
 function getAiClient(): GoogleGenAI {
   if (!aiClient) {
     const apiKey = process.env.GEMINI_API_KEY;
+
+    console.log("Initializing Gemini...");
+    console.log("API Key exists:", !!apiKey);
+
     if (!apiKey) {
-      throw new Error("GEMINI_API_KEY environment variable is required. Please set it in Settings > Secrets.");
+      throw new Error("GEMINI_API_KEY environment variable is required.");
     }
-    aiClient = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build",
-        },
-      },
-    });
+
+    aiClient = new GoogleGenAI({ apiKey });
   }
+
   return aiClient;
 }
 
@@ -43,6 +55,8 @@ app.get("/api/health", (req, res) => {
 // AI custom theme generator
 app.post("/api/ai/theme", async (req, res) => {
   const { prompt } = req.body;
+  console.log("Theme request body:", req.body);
+
   if (!prompt || typeof prompt !== "string") {
     return res.status(400).json({ success: false, error: "Prompt is required and must be a string." });
   }
@@ -53,7 +67,7 @@ app.post("/api/ai/theme", async (req, res) => {
       You are an elite graphic designer and resume typographer.
       The user wants to generate a high-contrast, professional, and visually stunning custom theme for their resume based on their prompt.
       You must respond with a complete, cohesive design package in JSON matching the requested schema.
-      
+
       Design guidelines:
       - Primary color: The main accent (e.g. headers, icons, sidebar backgrounds). Must have a high contrast against white (at least 4.5:1 ratio). Avoid pure light colors for text or main headings.
       - Secondary color: Complementary to the primary (e.g. job titles, dates).
@@ -71,6 +85,7 @@ app.post("/api/ai/theme", async (req, res) => {
       - customStylingTips: A short sentence summarizing the stylistic concept or design vibe (e.g., "A sophisticated editorial aesthetic with forest green accents and elegant serif typography").
     `;
 
+    console.log("Calling Gemini...");
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: `Generate a theme for this wishful description: "${prompt}"`,
@@ -97,20 +112,20 @@ app.post("/api/ai/theme", async (req, res) => {
                 border: { type: Type.STRING, description: "Hex color for dividers and borders" },
               }
             },
-            layoutStyle: { 
-              type: Type.STRING, 
+            layoutStyle: {
+              type: Type.STRING,
               enum: ["classic", "modern", "sidebar", "minimal"],
-              description: "The visual structural template layout to use" 
+              description: "The visual structural template layout to use"
             },
-            fontSize: { 
-              type: Type.STRING, 
+            fontSize: {
+              type: Type.STRING,
               enum: ["sm", "base", "lg"],
-              description: "Standard body text scale" 
+              description: "Standard body text scale"
             },
-            spacing: { 
-              type: Type.STRING, 
+            spacing: {
+              type: Type.STRING,
               enum: ["compact", "normal", "relaxed"],
-              description: "Inter-component layout breathing room" 
+              description: "Inter-component layout breathing room"
             },
             customStylingTips: { type: Type.STRING, description: "A summary of the custom theme vibe" }
           }
@@ -118,21 +133,60 @@ app.post("/api/ai/theme", async (req, res) => {
       }
     });
 
-    const parsedTheme = JSON.parse(response.text.trim());
+    console.log("Gemini response:");
+    console.dir(response, { depth: null });
+    console.log("Gemini response text:", response.text);
+
+    console.log("Parsing Gemini JSON...");
+
+    let parsedTheme;
+
+    try {
+        parsedTheme = JSON.parse(response.text.trim());
+    } catch (e) {
+        console.error("JSON PARSE FAILED");
+        console.error(response.text);
+        throw e;
+    }
+
+    return res.json({
+        success: true,
+        themeConfig: parsedTheme
+    });
     return res.json({ success: true, themeConfig: parsedTheme });
 
   } catch (err: any) {
-    console.error("Error in AI theme generation:", err);
-    return res.status(500).json({ 
-      success: false, 
-      error: err.message || "Failed to generate AI custom theme. Check your GEMINI_API_KEY." 
-    });
+    console.error("========== GEMINI ERROR ==========");
+    console.error(err);
+
+    console.error("Status:", err?.status);
+    console.error("Code:", err?.code);
+    console.error("Name:", err?.name);
+    console.error("Message:", err?.message);
+
+    if (err?.response) {
+        console.error("Response:");
+        console.dir(err.response, { depth: null });
+    }
+
+    if (err?.cause) {
+        console.error("Cause:");
+        console.dir(err.cause, { depth: null });
+    }
+
+    console.error("Stack:");
+    console.error(err?.stack);
+    console.error("==================================");
+
+    return res.status(500).json({ success: false, error: err?.message || "Gemini request failed." });
   }
 });
 
 // AI Resume Bullet Optimizer and Career Polisher
 app.post("/api/ai/optimize-bullet", async (req, res) => {
   const { text, jobTitle, company } = req.body;
+  console.log("Optimize Bullet:", req.body);
+
   if (!text || typeof text !== "string") {
     return res.status(400).json({ success: false, error: "Text to optimize is required." });
   }
@@ -142,7 +196,7 @@ app.post("/api/ai/optimize-bullet", async (req, res) => {
     const systemInstruction = `
       You are an expert executive resume writer and career coach.
       Your task is to take a raw description of a job responsibility or accomplishment and rewrite it into 3 polished, highly impactful, action-oriented bullet points suitable for a world-class professional resume.
-      
+
       Rules for rewriting:
       - Always start with strong, dynamic action verbs (e.g., "Spearheaded", "Optimized", "Architected", "Engineered", "Cultivated").
       - Focus heavily on results, metrics, and business impact where possible (e.g., adding realistic percentages, dollar amounts, or timeframe indicators if suggested by the input).
@@ -151,7 +205,8 @@ app.post("/api/ai/optimize-bullet", async (req, res) => {
     `;
 
     const contextStr = jobTitle ? `For a ${jobTitle} role at ${company || 'the company'}: ` : "";
-    
+
+    console.log("Calling Gemini...");
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: `Rewrite this raw work history draft into 3 powerful, result-oriented bullet points: "${contextStr}${text}"`,
@@ -168,21 +223,45 @@ app.post("/api/ai/optimize-bullet", async (req, res) => {
       }
     });
 
+    console.log("Gemini response:");
+    console.dir(response, { depth: null });
+    console.log("Gemini response text:", response.text);
+
     const suggestions = JSON.parse(response.text.trim());
     return res.json({ success: true, suggestions });
 
   } catch (err: any) {
-    console.error("Error optimizing resume bullet with Gemini:", err);
-    return res.status(500).json({ 
-      success: false, 
-      error: err.message || "Failed to optimize bullet points. Check your GEMINI_API_KEY." 
-    });
+    console.error("========== GEMINI ERROR ==========");
+    console.error(err);
+
+    console.error("Status:", err?.status);
+    console.error("Code:", err?.code);
+    console.error("Name:", err?.name);
+    console.error("Message:", err?.message);
+
+    if (err?.response) {
+        console.error("Response:");
+        console.dir(err.response, { depth: null });
+    }
+
+    if (err?.cause) {
+        console.error("Cause:");
+        console.dir(err.cause, { depth: null });
+    }
+
+    console.error("Stack:");
+    console.error(err?.stack);
+    console.error("==================================");
+
+    return res.status(500).json({ success: false, error: err?.message || "Gemini request failed." });
   }
 });
 
 // AI Skills Suggester
 app.post("/api/ai/suggest-skills", async (req, res) => {
   const { jobTitle } = req.body;
+  console.log("Suggest Skills:", req.body);
+
   if (!jobTitle || typeof jobTitle !== "string") {
     return res.status(400).json({ success: false, error: "jobTitle is required and must be a string." });
   }
@@ -196,6 +275,7 @@ app.post("/api/ai/suggest-skills", async (req, res) => {
       Respond only with the JSON array matching the requested schema.
     `;
 
+    console.log("Calling Gemini...");
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: `Provide 3 standard, high-impact skill groups for the job title: "${jobTitle}"`,
@@ -208,14 +288,14 @@ app.post("/api/ai/suggest-skills", async (req, res) => {
             type: Type.OBJECT,
             required: ["category", "skills"],
             properties: {
-              category: { 
-                type: Type.STRING, 
-                description: "Name of the skill category (e.g. Languages, Frameworks & Tools, Databases, Soft Skills)" 
+              category: {
+                type: Type.STRING,
+                description: "Name of the skill category (e.g. Languages, Frameworks & Tools, Databases, Soft Skills)"
               },
-              skills: { 
-                type: Type.ARRAY, 
-                items: { type: Type.STRING }, 
-                description: "List of 4 to 6 standard industry skills for this category" 
+              skills: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: "List of 4 to 6 standard industry skills for this category"
               }
             }
           }
@@ -223,21 +303,45 @@ app.post("/api/ai/suggest-skills", async (req, res) => {
       }
     });
 
+    console.log("Gemini response:");
+    console.dir(response, { depth: null });
+    console.log("Gemini response text:", response.text);
+
     const suggestedGroups = JSON.parse(response.text.trim());
     return res.json({ success: true, suggestedGroups });
 
   } catch (err: any) {
-    console.error("Error generating skill suggestions:", err);
-    return res.status(500).json({ 
-      success: false, 
-      error: err.message || "Failed to generate skill suggestions. Check your GEMINI_API_KEY." 
-    });
+    console.error("========== GEMINI ERROR ==========");
+    console.error(err);
+
+    console.error("Status:", err?.status);
+    console.error("Code:", err?.code);
+    console.error("Name:", err?.name);
+    console.error("Message:", err?.message);
+
+    if (err?.response) {
+        console.error("Response:");
+        console.dir(err.response, { depth: null });
+    }
+
+    if (err?.cause) {
+        console.error("Cause:");
+        console.dir(err.cause, { depth: null });
+    }
+
+    console.error("Stack:");
+    console.error(err?.stack);
+    console.error("==================================");
+
+    return res.status(500).json({ success: false, error: err?.message || "Gemini request failed." });
   }
 });
 
 // AI Single Bullet Polisher
 app.post("/api/ai/polish-bullet", async (req, res) => {
   const { text, jobTitle } = req.body;
+  console.log("Polish Bullet:", req.body);
+
   if (!text || typeof text !== "string") {
     return res.status(400).json({ success: false, error: "Text to polish is required and must be a string." });
   }
@@ -255,24 +359,45 @@ app.post("/api/ai/polish-bullet", async (req, res) => {
 
     const contextStr = jobTitle ? `For a ${jobTitle} role: ` : "";
 
+    console.log("Calling Gemini...");
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: `Polish this resume accomplishment: "${contextStr}${text}"`,
       config: { systemInstruction }
     });
 
+    console.log("Gemini response:");
+    console.dir(response, { depth: null });
+    console.log("Gemini response text:", response.text);
+
     return res.json({ success: true, polishedText: response.text.trim() });
 
   } catch (err: any) {
-    console.error("Error polishing resume bullet with Gemini:", err);
-    return res.status(500).json({ 
-      success: false, 
-      error: err.message || "Failed to polish bullet point. Check your GEMINI_API_KEY." 
-    });
+    console.error("========== GEMINI ERROR ==========");
+    console.error(err);
+
+    console.error("Status:", err?.status);
+    console.error("Code:", err?.code);
+    console.error("Name:", err?.name);
+    console.error("Message:", err?.message);
+
+    if (err?.response) {
+        console.error("Response:");
+        console.dir(err.response, { depth: null });
+    }
+
+    if (err?.cause) {
+        console.error("Cause:");
+        console.dir(err.cause, { depth: null });
+    }
+
+    console.error("Stack:");
+    console.error(err?.stack);
+    console.error("==================================");
+
+    return res.status(500).json({ success: false, error: err?.message || "Gemini request failed." });
   }
 });
-
-
 
 // Vite Integration & Static Asset Delivery
 async function startServer() {
