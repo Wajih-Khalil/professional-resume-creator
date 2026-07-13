@@ -29,7 +29,7 @@ app.post("/api/ai/suggest-skills", async (req, res) => {
     `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: `Provide 3 standard, high-impact skill groups for the job title: "${jobTitle}"`,
       config: {
         systemInstruction,
@@ -88,7 +88,7 @@ app.post("/api/ai/polish-bullet", async (req, res) => {
     const contextStr = jobTitle ? `For a ${jobTitle} role: ` : "";
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: `Polish this resume accomplishment: "${contextStr}${text}"`,
       config: { systemInstruction }
     });
