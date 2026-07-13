@@ -1,0 +1,6 @@
+{
+  "name": "Professional Resume Creator",
+  "description": "An AI-powered full-stack professional resume builder with customizable templates, career-impact polishing, and dynamic cloud syncing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
