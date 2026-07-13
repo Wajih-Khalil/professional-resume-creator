@@ -46,7 +46,18 @@ function getAiClient(): GoogleGenAI {
 }
 
 // API Routes
+app.get("/api/models", async (req, res) => {
+  try {
+    const ai = getAiClient();
 
+    const response = await ai.models.list();
+
+    res.json(response);
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json(err);
+  }
+});
 // Health check
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", time: new Date().toISOString() });
